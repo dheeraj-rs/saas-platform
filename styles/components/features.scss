@@ -1,0 +1,234 @@
+.features-section {
+  @apply py-20 bg-gray-50 dark:bg-gray-900;
+}
+
+.features-container {
+  @apply container mx-auto px-6;
+  max-width: 1200px;
+}
+
+.section-header {
+  @apply text-center mb-16;
+}
+
+.section-title {
+  @apply text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4;
+}
+
+.section-description {
+  @apply text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto;
+}
+
+.features-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8;
+}
+
+.feature-card {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm hover:shadow-lg transition-all duration-300 hover:transform hover:scale-105;
+  
+  &:hover {
+    .feature-icon {
+      @apply text-primary;
+      transform: scale(1.1);
+    }
+  }
+}
+
+.feature-header {
+  @apply flex flex-col items-center text-center mb-4;
+}
+
+.feature-icon {
+  @apply w-12 h-12 text-gray-600 dark:text-gray-400 mb-4 transition-all duration-300;
+}
+
+.feature-title {
+  @apply text-xl font-semibold text-gray-900 dark:text-white mb-2;
+}
+
+.feature-description {
+  @apply text-gray-600 dark:text-gray-300 leading-relaxed;
+}
+
+/* Stats Section */
+.stats-section {
+  @apply py-16 bg-primary text-white;
+}
+
+.stats-container {
+  @apply container mx-auto px-6;
+  max-width: 1200px;
+}
+
+.stats-grid {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-8;
+}
+
+.stat-item {
+  @apply text-center;
+}
+
+.stat-number {
+  @apply text-3xl md:text-4xl font-bold mb-2;
+  background: linear-gradient(45deg, #ffffff, #e0f2ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stat-label {
+  @apply text-blue-100 font-medium;
+}
+
+/* CTA Section */
+.cta-section {
+  @apply py-20 bg-gradient-to-r from-primary to-secondary text-white;
+}
+
+.cta-container {
+  @apply container mx-auto px-6 text-center;
+  max-width: 800px;
+}
+
+.cta-content {
+  @apply space-y-6;
+}
+
+.cta-title {
+  @apply text-3xl md:text-4xl font-bold mb-4;
+}
+
+.cta-description {
+  @apply text-lg text-blue-100 mb-8;
+}
+
+.cta-button {
+  @apply bg-white text-primary hover:bg-blue-50 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 px-8 py-3;
+}
+
+/* Footer */
+.site-footer {
+  @apply py-12 bg-gray-900 text-white;
+}
+
+.footer-container {
+  @apply container mx-auto px-6;
+  max-width: 1200px;
+}
+
+.footer-content {
+  @apply flex flex-col md:flex-row justify-between items-center gap-6;
+}
+
+.footer-text {
+  @apply text-gray-400;
+}
+
+.footer-links {
+  @apply flex gap-6;
+}
+
+.footer-link {
+  @apply text-gray-400 hover:text-white transition-colors duration-200;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .features-grid {
+    @apply grid-cols-1 gap-6;
+  }
+  
+  .stats-grid {
+    @apply grid-cols-2 gap-6;
+  }
+  
+  .stat-number {
+    @apply text-2xl;
+  }
+  
+  .section-title {
+    @apply text-2xl;
+  }
+  
+  .cta-title {
+    @apply text-2xl;
+  }
+}
+
+/* Accessibility enhancements */
+@media (prefers-reduced-motion: reduce) {
+  .feature-card {
+    transition: none;
+    
+    &:hover {
+      transform: none;
+    }
+  }
+  
+  .feature-icon {
+    transition: none;
+  }
+  
+  .cta-button {
+    transition: none;
+    
+    &:hover {
+      transform: none;
+    }
+  }
+}
+
+/* High contrast support */
+@media (prefers-contrast: high) {
+  .feature-card {
+    @apply border-2 border-gray-900 dark:border-white;
+  }
+  
+  .feature-icon {
+    @apply text-gray-900 dark:text-white;
+  }
+  
+  .feature-title {
+    @apply text-gray-900 dark:text-white;
+  }
+  
+  .feature-description {
+    @apply text-gray-800 dark:text-gray-200;
+  }
+}
+
+/* Animation delays for staggered effect */
+.feature-card:nth-child(1) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.1s;
+  opacity: 0;
+}
+
+.feature-card:nth-child(2) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+.feature-card:nth-child(3) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.3s;
+  opacity: 0;
+}
+
+.feature-card:nth-child(4) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.4s;
+  opacity: 0;
+}
+
+.feature-card:nth-child(5) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.5s;
+  opacity: 0;
+}
+
+.feature-card:nth-child(6) {
+  animation: slide-up 0.6s ease-out forwards;
+  animation-delay: 0.6s;
+  opacity: 0;
+}
