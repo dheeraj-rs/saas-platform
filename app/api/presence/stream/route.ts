@@ -30,6 +30,7 @@ export async function GET(_req: NextRequest) {
 
   async function snapshot() {
     const since = new Date(Date.now() - presenceWindowMs);
+    const fifteenMinSince = new Date(Date.now() - 15 * 60 * 1000);
     const userFilter: any = {
       isActive: true,
       lastSeen: { $gte: since },
@@ -38,13 +39,13 @@ export async function GET(_req: NextRequest) {
     };
     const activeUsers = await usersCol.countDocuments(userFilter);
     const actFilter: any = {
-      type: { $in: ['login', 'offline'] },
+      type: { $in: ['login', 'logout'] },
       ...(superadminEmails.length ? { userEmail: { $nin: superadminEmails } } : {}),
     };
     const activities = await activitiesCol
       .find(actFilter)
       .sort({ timestamp: -1 })
-      .limit(10)
+      .limit(50)
       .toArray()
       .catch(() => []);
 
@@ -53,10 +54,18 @@ export async function GET(_req: NextRequest) {
       action: a.type || 'activity',
       user: a.userEmail || a.user || 'system',
       timestamp: a.timestamp || new Date(),
-      status: (a.type === 'offline' ? 'warning' : 'success') as 'success' | 'warning' | 'error',
+      status: (a.type === 'logout' ? 'success' : 'success') as 'success' | 'warning' | 'error',
     }));
 
-    return { activeUsers, recentActivity };
+    // Visitors in last 15 minutes
+    const visitorsFilter: any = {
+      lastSeen: { $gte: fifteenMinSince },
+      role: { $ne: 'superadmin' },
+      ...(superadminEmails.length ? { email: { $nin: superadminEmails } } : {}),
+    };
+    const visitors = await usersCol.countDocuments(visitorsFilter).catch(() => 0);
+
+    return { activeUsers, recentActivity, visitors };
   }
 
   let closeRef: (() => void) | null = null;
@@ -105,12 +114,12 @@ export async function GET(_req: NextRequest) {
           { fullDocument: 'updateLookup' }
         );
         // @ts-ignore
-        // Only react to login/offline inserts
+        // Only react to login/logout inserts
         activitiesStream = activitiesCol.watch([
           {
             $match: {
               operationType: { $in: ['insert'] },
-              'fullDocument.type': { $in: ['login', 'offline'] },
+              'fullDocument.type': { $in: ['login', 'logout'] },
             },
           },
         ]);

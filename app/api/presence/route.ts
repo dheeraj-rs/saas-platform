@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
-    // Optional: log activity heartbeat
+    // Log presence activity: treat offline as an explicit logout to reflect in dashboards
     await db.collection('userActivities').insertOne({
-      type: offline ? 'offline' : 'heartbeat',
+      type: offline ? 'logout' : 'heartbeat',
       userEmail: session.user.email,
       userId: (session.user as any).id,
       tenantId,

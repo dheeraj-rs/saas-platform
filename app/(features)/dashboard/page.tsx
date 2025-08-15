@@ -59,6 +59,7 @@ interface DashboardData {
     systemUptime: string;
     apiRequests: number;
     responseTime: string;
+    visitors?: number;
   };
   charts: {
     userActivity: Array<{ time: string; users: number; requests: number }>;
@@ -68,6 +69,12 @@ interface DashboardData {
       value: number;
       change: number;
     }>;
+  };
+  accessStats?: {
+    peakHour: string;
+    peakCount: number;
+    offPeakHour: string;
+    offPeakCount: number;
   };
   recentActivity: Array<{
     id: string;
@@ -101,12 +108,32 @@ export default function DashboardPage() {
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
   const [publicIp, setPublicIp] = useState<string | null>(null);
 
-  // Helper: keep only login/logout activities (drop heartbeats and others)
+  // Helper: keep all activities except heartbeats, and normalize common
+  // variants like SignIn/SignOut to 'login'/'logout'.
   type ActivityItem = DashboardData['recentActivity'][number];
   const filterActivity = useCallback(
     (list: ActivityItem[]): ActivityItem[] => {
       if (!Array.isArray(list)) return [];
-      return list.filter((a) => a && (a.action === 'login' || a.action === 'logout'));
+      const normalize = (s: string) => (s || '').toLowerCase();
+      const isLogin = (s: string) =>
+        s.includes('login') || s.includes('log in') || s.includes('signin') || s.includes('sign in');
+      const isLogout = (s: string) =>
+        s.includes('logout') || s.includes('log out') || s.includes('signout') || s.includes('sign out');
+
+      const mapped: ActivityItem[] = [];
+      for (const item of list) {
+        if (!item) continue;
+        const act = normalize(item.action);
+        if (act.includes('heartbeat')) continue; // drop heartbeats only
+        if (isLogin(act)) {
+          mapped.push({ ...item, action: 'login' });
+        } else if (isLogout(act)) {
+          mapped.push({ ...item, action: 'logout' });
+        } else {
+          mapped.push(item); // keep other actions as-is
+        }
+      }
+      return mapped;
     },
     []
   );
@@ -124,7 +151,7 @@ export default function DashboardPage() {
 
     try {
       setRefreshing(true);
-      const response = await fetch('/api/dashboard', {
+      const response = await fetch('/api/dashboard?activityLimit=200', {
         headers: {
           Authorization: `Bearer ${(session as any).accessToken}`,
         },
@@ -264,6 +291,7 @@ export default function DashboardPage() {
 
             // Compute active users: prefer server number, else adjust by login/logout deltas
             let nextActive = prev.metrics.activeUsers;
+            let nextVisitors = prev.metrics.visitors ?? 0;
             if (typeof payload.activeUsers === 'number') {
               nextActive = payload.activeUsers;
             } else if (incomingList) {
@@ -274,12 +302,16 @@ export default function DashboardPage() {
               }
               nextActive = Math.max(0, nextActive + delta);
             }
+            if (typeof payload.visitors === 'number') {
+              nextVisitors = payload.visitors;
+            }
 
             return {
               ...prev,
               metrics: {
                 ...prev.metrics,
                 activeUsers: nextActive,
+                visitors: nextVisitors,
               },
               recentActivity: incomingList ?? prev.recentActivity,
             };
@@ -346,10 +378,23 @@ export default function DashboardPage() {
           lastUpdated: new Date(),
         },
         {
+          id: 'visitors',
+          type: 'metric',
+          title: t('dashboard.visitors', { defaultValue: 'Visitors (15m)' }),
+          position: { x: 6, y: 0, width: 3, height: 1 },
+          data: {
+            value: dashboardData.metrics.visitors ?? 0,
+            change: '',
+            trend: 'flat',
+            icon: Activity,
+          },
+          lastUpdated: new Date(),
+        },
+        {
           id: 'security-alerts',
           type: 'metric',
           title: t('dashboard.securityAlerts'),
-          position: { x: 6, y: 0, width: 3, height: 1 },
+          position: { x: 9, y: 0, width: 3, height: 1 },
           data: {
             value: dashboardData.metrics.securityAlerts,
             change: '-3%',
@@ -363,11 +408,37 @@ export default function DashboardPage() {
           id: 'system-uptime',
           type: 'metric',
           title: t('dashboard.systemUptime'),
-          position: { x: 9, y: 0, width: 3, height: 1 },
+          position: { x: 0, y: 1, width: 3, height: 1 },
           data: {
             value: dashboardData.metrics.systemUptime,
             status: 'operational',
             icon: CheckCircle,
+          },
+          lastUpdated: new Date(),
+        },
+        {
+          id: 'peak-access',
+          type: 'metric',
+          title: t('dashboard.peakAccess', { defaultValue: 'Peak Access Hour' }),
+          position: { x: 3, y: 1, width: 3, height: 1 },
+          data: {
+            value: dashboardData.accessStats?.peakHour ?? 'N/A',
+            change: `${dashboardData.accessStats?.peakCount ?? 0} users`,
+            trend: 'up',
+            icon: Clock,
+          },
+          lastUpdated: new Date(),
+        },
+        {
+          id: 'offpeak-access',
+          type: 'metric',
+          title: t('dashboard.offPeakAccess', { defaultValue: 'Off-Peak Access Hour' }),
+          position: { x: 6, y: 1, width: 3, height: 1 },
+          data: {
+            value: dashboardData.accessStats?.offPeakHour ?? 'N/A',
+            change: `${dashboardData.accessStats?.offPeakCount ?? 0} users`,
+            trend: 'down',
+            icon: Clock,
           },
           lastUpdated: new Date(),
         },
@@ -378,7 +449,7 @@ export default function DashboardPage() {
           description: t('dashboard.userActivityDesc', {
             defaultValue: 'Active users and API requests over time',
           }),
-          position: { x: 0, y: 1, width: 6, height: 3 },
+          position: { x: 9, y: 1, width: 3, height: 1 },
           data: {
             chartType: 'area',
             data: dashboardData.charts.userActivity,
@@ -408,7 +479,7 @@ export default function DashboardPage() {
           description: t('dashboard.securityEventsDesc', {
             defaultValue: 'Threats detected and blocked',
           }),
-          position: { x: 6, y: 1, width: 6, height: 3 },
+          position: { x: 0, y: 2, width: 6, height: 3 },
           data: {
             chartType: 'bar',
             data: dashboardData.charts.securityEvents,
@@ -434,7 +505,7 @@ export default function DashboardPage() {
           type: 'activity',
           title: 'Recent Activity',
           description: 'Latest system events and user actions',
-          position: { x: 0, y: 4, width: 6, height: 3 },
+          position: { x: 6, y: 2, width: 6, height: 3 },
           data: dashboardData.recentActivity,
           refreshInterval: 15000, // 15 seconds
           lastUpdated: new Date(),
@@ -444,7 +515,7 @@ export default function DashboardPage() {
           type: 'alert',
           title: 'Security Alerts',
           description: 'Active security incidents and threats',
-          position: { x: 6, y: 4, width: 6, height: 3 },
+          position: { x: 0, y: 5, width: 12, height: 3 },
           data: dashboardData.securityAlerts,
           refreshInterval: 30000, // 30 seconds
           lastUpdated: new Date(),

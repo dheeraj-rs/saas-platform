@@ -49,18 +49,17 @@ export async function GET(request: NextRequest) {
     };
 
     const visitorsFilter: any = {
-      ip: { $exists: true },
       lastSeen: { $gte: fifteenMinSince },
       ...notSuperadminRole,
       ...notSuperadminEmail,
     };
 
-    const [totalUsers, activeUsers, alertsCount, latestSystem, recentIps] = await Promise.all([
+    const [totalUsers, activeUsers, alertsCount, latestSystem, visitorsCount] = await Promise.all([
       usersCol.countDocuments({}),
       usersCol.countDocuments(activeFilter),
       alertsCol.countDocuments({}),
       systemCol.find({}).sort({ updatedAt: -1 }).limit(1).toArray().catch(() => []),
-      usersCol.distinct('ip', visitorsFilter).catch(() => [] as string[]),
+      usersCol.countDocuments(visitorsFilter).catch(() => 0),
     ]);
 
     // Charts: user activity for last 24h grouped by hour
@@ -138,6 +137,10 @@ export async function GET(request: NextRequest) {
     ];
 
     // Recent activity (logins/signouts/heartbeats) from userActivities and auditLogs if present
+    // Read optional limit for recent activity (default 100)
+    const url = new URL(request.url);
+    const activityLimit = Math.max(1, Math.min(1000, parseInt(url.searchParams.get('activityLimit') || '100')));
+
     const [activities, auditLogs] = await Promise.all([
       db
         .collection('userActivities')
@@ -147,14 +150,14 @@ export async function GET(request: NextRequest) {
             : {}
         )
         .sort({ timestamp: -1 })
-        .limit(10)
+        .limit(activityLimit)
         .toArray()
         .catch(() => []),
       db
         .collection('auditLogs')
         .find({})
         .sort({ timestamp: -1 })
-        .limit(10)
+        .limit(activityLimit)
         .toArray()
         .catch(() => []),
     ]);
@@ -182,8 +185,40 @@ export async function GET(request: NextRequest) {
         status: (l.status as 'success' | 'warning' | 'error') ?? 'success',
       })),
     ]
-      .sort((a, b) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime())
-      .slice(0, 10);
+      .sort((a, b) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime());
+
+    // Access time stats: compute login counts per hour for last 24h and pick peak/off-peak
+    const since24 = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const accessAgg = await db
+      .collection('userActivities')
+      .aggregate([
+        { $match: { timestamp: { $gte: since24 }, type: 'login' } },
+        {
+          $group: {
+            _id: { $dateToString: { date: '$timestamp', format: '%H:00' } },
+            count: { $sum: 1 },
+          },
+        },
+        { $project: { _id: 0, hour: '$_id', count: 1 } },
+        { $sort: { hour: 1 } },
+      ])
+      .toArray()
+      .catch(() => [] as Array<{ hour: string; count: number }>);
+
+    let peakHour = 'N/A';
+    let peakCount = 0;
+    let offPeakHour = 'N/A';
+    let offPeakCount = 0;
+    for (const row of accessAgg) {
+      if (row.count > peakCount) {
+        peakCount = row.count;
+        peakHour = row.hour;
+      }
+      if (offPeakCount === 0 || row.count < offPeakCount) {
+        offPeakCount = row.count;
+        offPeakHour = row.hour;
+      }
+    }
 
     // Security alerts list
     const alerts = await alertsCol
@@ -211,10 +246,11 @@ export async function GET(request: NextRequest) {
         systemUptime: latestSystem?.[0]?.uptime ?? 'N/A',
         apiRequests: requestsAgg.reduce((s, r) => s + (r.requests || 0), 0),
         responseTime: latestSystem?.[0]?.responseTimeMs ? `${latestSystem[0].responseTimeMs}ms` : 'N/A',
-        visitors: Array.isArray(recentIps) ? recentIps.length : 0,
+        visitors: visitorsCount,
       },
       charts: { userActivity, securityEvents, performanceMetrics },
       recentActivity,
+      accessStats: { peakHour, peakCount, offPeakHour, offPeakCount },
       securityAlerts,
     });
   } catch (error) {
