@@ -9,30 +9,18 @@ import {
   Draggable,
   DropResult,
 } from 'react-beautiful-dnd';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  LayoutDashboard,
   Users,
   Activity,
   Shield,
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
   CheckCircle,
   Clock,
-  Globe,
-  Plus,
   Settings,
   MoreVertical,
-  Maximize2,
   RefreshCw,
 } from 'lucide-react';
 import {
@@ -42,9 +30,6 @@ import {
   Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -101,8 +86,6 @@ interface DashboardData {
   }>;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
-
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -117,6 +100,16 @@ export default function DashboardPage() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
   const [publicIp, setPublicIp] = useState<string | null>(null);
+
+  // Helper: keep only login/logout activities (drop heartbeats and others)
+  type ActivityItem = DashboardData['recentActivity'][number];
+  const filterActivity = useCallback(
+    (list: ActivityItem[]): ActivityItem[] => {
+      if (!Array.isArray(list)) return [];
+      return list.filter((a) => a && (a.action === 'login' || a.action === 'logout'));
+    },
+    []
+  );
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -139,6 +132,10 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const data = await response.json();
+        // Ensure only login/logout activities are kept in recentActivity
+        if (Array.isArray(data?.recentActivity)) {
+          data.recentActivity = filterActivity(data.recentActivity);
+        }
         setDashboardData(data);
         setLastRefresh(new Date());
       }
@@ -148,7 +145,7 @@ export default function DashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session]);
+  }, [session, filterActivity]);
 
   // Request geolocation (best-effort)
   useEffect(() => {
@@ -174,7 +171,7 @@ export default function DashboardPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (mounted) setPublicIp(j.ip);
-      } catch {}
+      } catch { }
     })();
     return () => {
       mounted = false;
@@ -198,7 +195,7 @@ export default function DashboardPage() {
         });
         // refresh dashboard immediately after heartbeat
         await loadDashboardData();
-      } catch {}
+      } catch { }
     };
 
     // initial heartbeat
@@ -231,7 +228,7 @@ export default function DashboardPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (mounted) setPublicIp(j.ip);
-      } catch {}
+      } catch { }
     })();
     return () => {
       mounted = false;
@@ -260,33 +257,46 @@ export default function DashboardPage() {
           const payload = JSON.parse(ev.data || '{}');
           setDashboardData((prev) => {
             if (!prev) return prev;
+            // Filter incoming activity to only login/logout
+            const incomingList = Array.isArray(payload.recentActivity)
+              ? filterActivity(payload.recentActivity as ActivityItem[])
+              : null;
+
+            // Compute active users: prefer server number, else adjust by login/logout deltas
+            let nextActive = prev.metrics.activeUsers;
+            if (typeof payload.activeUsers === 'number') {
+              nextActive = payload.activeUsers;
+            } else if (incomingList) {
+              let delta = 0;
+              for (const a of incomingList) {
+                if (a.action === 'login') delta += 1;
+                if (a.action === 'logout') delta -= 1;
+              }
+              nextActive = Math.max(0, nextActive + delta);
+            }
+
             return {
               ...prev,
               metrics: {
                 ...prev.metrics,
-                activeUsers:
-                  typeof payload.activeUsers === 'number'
-                    ? payload.activeUsers
-                    : prev.metrics.activeUsers,
+                activeUsers: nextActive,
               },
-              recentActivity: Array.isArray(payload.recentActivity)
-                ? payload.recentActivity
-                : prev.recentActivity,
+              recentActivity: incomingList ?? prev.recentActivity,
             };
           });
-        } catch {}
+        } catch { }
       };
       es.addEventListener('snapshot', onEvent as any);
       es.addEventListener('update', onEvent as any);
-      const onPing = () => {};
+      const onPing = () => { };
       es.addEventListener('ping', onPing as any);
-    } catch {}
+    } catch { }
     return () => {
       try {
         es && es.close();
-      } catch {}
+      } catch { }
     };
-  }, [session?.user]);
+  }, [session?.user, filterActivity]);
 
   // Mark offline on tab close/refresh
   useEffect(() => {
@@ -307,6 +317,7 @@ export default function DashboardPage() {
   // Initialize widgets
   useEffect(() => {
     if (dashboardData) {
+      console.log('dashboardData :', dashboardData);
       const defaultWidgets: Widget[] = [
         {
           id: 'total-users',
@@ -502,13 +513,12 @@ export default function DashboardPage() {
 
         {widget.data.change && (
           <div
-            className={`flex items-center gap-1 text-sm ${
-              widget.data.trend === 'up'
-                ? 'text-green-600'
-                : widget.data.trend === 'down'
+            className={`flex items-center gap-1 text-sm ${widget.data.trend === 'up'
+              ? 'text-green-600'
+              : widget.data.trend === 'down'
                 ? 'text-red-600'
                 : 'text-gray-600'
-            }`}
+              }`}
           >
             {widget.data.trend === 'up' ? (
               <TrendingUp className="w-4 h-4" />
@@ -597,13 +607,12 @@ export default function DashboardPage() {
           {widget.data.map((activity: any, index: number) => (
             <div key={activity.id || index} className="flex items-center gap-3">
               <div
-                className={`w-2 h-2 rounded-full ${
-                  activity.status === 'success'
-                    ? 'bg-green-500'
-                    : activity.status === 'warning'
+                className={`w-2 h-2 rounded-full ${activity.status === 'success'
+                  ? 'bg-green-500'
+                  : activity.status === 'warning'
                     ? 'bg-yellow-500'
                     : 'bg-red-500'
-                }`}
+                  }`}
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">
@@ -642,10 +651,10 @@ export default function DashboardPage() {
                     alert.severity === 'critical'
                       ? 'destructive'
                       : alert.severity === 'high'
-                      ? 'destructive'
-                      : alert.severity === 'medium'
-                      ? 'secondary'
-                      : 'outline'
+                        ? 'destructive'
+                        : alert.severity === 'medium'
+                          ? 'secondary'
+                          : 'outline'
                   }
                   className="ml-2"
                 >
@@ -716,7 +725,7 @@ export default function DashboardPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ offline: true }),
                     });
-                  } catch {}
+                  } catch { }
                   await signOut({ callbackUrl: '/auth/login' });
                 }}
               >
@@ -769,9 +778,8 @@ export default function DashboardPage() {
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`widget ${
-                            snapshot.isDragging ? 'dragging' : ''
-                          }`}
+                          className={`widget ${snapshot.isDragging ? 'dragging' : ''
+                            }`}
                           style={{
                             ...provided.draggableProps.style,
                             gridColumn: `span ${widget.position.width}`,

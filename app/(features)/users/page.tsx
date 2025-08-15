@@ -78,7 +78,7 @@ export default function UsersPage() {
         const { latitude, longitude } = pos.coords;
         setGeo({ lat: latitude, lng: longitude });
       },
-      () => {},
+      () => { },
       { enableHighAccuracy: false, timeout: 5000 }
     );
   }, []);
@@ -99,7 +99,7 @@ export default function UsersPage() {
         });
         // Immediately refresh table to reduce status delay
         await load();
-      } catch {}
+      } catch { }
     };
     sendHeartbeat();
     const id = setInterval(() => {
@@ -114,7 +114,7 @@ export default function UsersPage() {
           '/api/presence',
           JSON.stringify({ offline: true })
         );
-      } catch {}
+      } catch { }
     };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -143,7 +143,7 @@ export default function UsersPage() {
           if (!r.ok) continue;
           const j = await r.json();
           if (j?.ip) return j.ip as string;
-        } catch {}
+        } catch { }
       }
       return null;
     };
@@ -285,7 +285,7 @@ function normalizeUser(u: any): UserRow {
     } else {
       active = false;
     }
-  } catch {}
+  } catch { }
   return {
     name: u.name,
     email: u.email,

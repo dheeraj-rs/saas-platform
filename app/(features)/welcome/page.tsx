@@ -8,7 +8,6 @@ export default function WelcomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  // If an admin somehow lands here, push to dashboard
   React.useEffect(() => {
     if (status !== 'authenticated') return;
     const role = (session?.user as any)?.role as string | undefined;
@@ -40,7 +39,7 @@ export default function WelcomePage() {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ offline: true }),
                 });
-              } catch {}
+              } catch { }
               await signOut({ callbackUrl: '/auth/login' });
             }}
           >
