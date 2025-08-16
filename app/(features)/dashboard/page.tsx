@@ -54,6 +54,8 @@ interface Widget {
 interface DashboardData {
   metrics: {
     totalUsers: number;
+    admins?: number;
+    users?: number;
     activeUsers: number;
     securityAlerts: number;
     systemUptime: string;
@@ -111,32 +113,35 @@ export default function DashboardPage() {
   // Helper: keep all activities except heartbeats, and normalize common
   // variants like SignIn/SignOut to 'login'/'logout'.
   type ActivityItem = DashboardData['recentActivity'][number];
-  const filterActivity = useCallback(
-    (list: ActivityItem[]): ActivityItem[] => {
-      if (!Array.isArray(list)) return [];
-      const normalize = (s: string) => (s || '').toLowerCase();
-      const isLogin = (s: string) =>
-        s.includes('login') || s.includes('log in') || s.includes('signin') || s.includes('sign in');
-      const isLogout = (s: string) =>
-        s.includes('logout') || s.includes('log out') || s.includes('signout') || s.includes('sign out');
+  const filterActivity = useCallback((list: ActivityItem[]): ActivityItem[] => {
+    if (!Array.isArray(list)) return [];
+    const normalize = (s: string) => (s || '').toLowerCase();
+    const isLogin = (s: string) =>
+      s.includes('login') ||
+      s.includes('log in') ||
+      s.includes('signin') ||
+      s.includes('sign in');
+    const isLogout = (s: string) =>
+      s.includes('logout') ||
+      s.includes('log out') ||
+      s.includes('signout') ||
+      s.includes('sign out');
 
-      const mapped: ActivityItem[] = [];
-      for (const item of list) {
-        if (!item) continue;
-        const act = normalize(item.action);
-        if (act.includes('heartbeat')) continue; // drop heartbeats only
-        if (isLogin(act)) {
-          mapped.push({ ...item, action: 'login' });
-        } else if (isLogout(act)) {
-          mapped.push({ ...item, action: 'logout' });
-        } else {
-          mapped.push(item); // keep other actions as-is
-        }
+    const mapped: ActivityItem[] = [];
+    for (const item of list) {
+      if (!item) continue;
+      const act = normalize(item.action);
+      if (act.includes('heartbeat')) continue; // drop heartbeats only
+      if (isLogin(act)) {
+        mapped.push({ ...item, action: 'login' });
+      } else if (isLogout(act)) {
+        mapped.push({ ...item, action: 'logout' });
+      } else {
+        mapped.push(item); // keep other actions as-is
       }
-      return mapped;
-    },
-    []
-  );
+    }
+    return mapped;
+  }, []);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -198,7 +203,7 @@ export default function DashboardPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (mounted) setPublicIp(j.ip);
-      } catch { }
+      } catch {}
     })();
     return () => {
       mounted = false;
@@ -222,7 +227,7 @@ export default function DashboardPage() {
         });
         // refresh dashboard immediately after heartbeat
         await loadDashboardData();
-      } catch { }
+      } catch {}
     };
 
     // initial heartbeat
@@ -255,7 +260,7 @@ export default function DashboardPage() {
         if (!r.ok) return;
         const j = await r.json();
         if (mounted) setPublicIp(j.ip);
-      } catch { }
+      } catch {}
     })();
     return () => {
       mounted = false;
@@ -316,17 +321,17 @@ export default function DashboardPage() {
               recentActivity: incomingList ?? prev.recentActivity,
             };
           });
-        } catch { }
+        } catch {}
       };
       es.addEventListener('snapshot', onEvent as any);
       es.addEventListener('update', onEvent as any);
-      const onPing = () => { };
+      const onPing = () => {};
       es.addEventListener('ping', onPing as any);
-    } catch { }
+    } catch {}
     return () => {
       try {
         es && es.close();
-      } catch { }
+      } catch {}
     };
   }, [session?.user, filterActivity]);
 
@@ -378,10 +383,42 @@ export default function DashboardPage() {
           lastUpdated: new Date(),
         },
         {
+          id: 'admins-count',
+          type: 'metric',
+          title: t('dashboard.admins', { defaultValue: 'Admins' }),
+          position: { x: 6, y: 0, width: 3, height: 1 },
+          data: {
+            value: dashboardData.metrics.admins ?? 0,
+            change: '',
+            trend: 'flat',
+            icon: Shield,
+          },
+          lastUpdated: new Date(),
+        },
+        {
+          id: 'users-count',
+          type: 'metric',
+          title: t('dashboard.users', { defaultValue: 'Users' }),
+          position: { x: 9, y: 0, width: 3, height: 1 },
+          data: {
+            value:
+              dashboardData.metrics.users ??
+              Math.max(
+                0,
+                (dashboardData.metrics.totalUsers || 0) -
+                  (dashboardData.metrics.admins || 0)
+              ),
+            change: '',
+            trend: 'flat',
+            icon: Users,
+          },
+          lastUpdated: new Date(),
+        },
+        {
           id: 'visitors',
           type: 'metric',
           title: t('dashboard.visitors', { defaultValue: 'Visitors (15m)' }),
-          position: { x: 6, y: 0, width: 3, height: 1 },
+          position: { x: 0, y: 1, width: 3, height: 1 },
           data: {
             value: dashboardData.metrics.visitors ?? 0,
             change: '',
@@ -394,7 +431,7 @@ export default function DashboardPage() {
           id: 'security-alerts',
           type: 'metric',
           title: t('dashboard.securityAlerts'),
-          position: { x: 9, y: 0, width: 3, height: 1 },
+          position: { x: 3, y: 1, width: 3, height: 1 },
           data: {
             value: dashboardData.metrics.securityAlerts,
             change: '-3%',
@@ -408,7 +445,7 @@ export default function DashboardPage() {
           id: 'system-uptime',
           type: 'metric',
           title: t('dashboard.systemUptime'),
-          position: { x: 0, y: 1, width: 3, height: 1 },
+          position: { x: 6, y: 1, width: 3, height: 1 },
           data: {
             value: dashboardData.metrics.systemUptime,
             status: 'operational',
@@ -419,8 +456,10 @@ export default function DashboardPage() {
         {
           id: 'peak-access',
           type: 'metric',
-          title: t('dashboard.peakAccess', { defaultValue: 'Peak Access Hour' }),
-          position: { x: 3, y: 1, width: 3, height: 1 },
+          title: t('dashboard.peakAccess', {
+            defaultValue: 'Peak Access Hour',
+          }),
+          position: { x: 9, y: 1, width: 3, height: 1 },
           data: {
             value: dashboardData.accessStats?.peakHour ?? 'N/A',
             change: `${dashboardData.accessStats?.peakCount ?? 0} users`,
@@ -432,8 +471,10 @@ export default function DashboardPage() {
         {
           id: 'offpeak-access',
           type: 'metric',
-          title: t('dashboard.offPeakAccess', { defaultValue: 'Off-Peak Access Hour' }),
-          position: { x: 6, y: 1, width: 3, height: 1 },
+          title: t('dashboard.offPeakAccess', {
+            defaultValue: 'Off-Peak Access Hour',
+          }),
+          position: { x: 0, y: 2, width: 3, height: 1 },
           data: {
             value: dashboardData.accessStats?.offPeakHour ?? 'N/A',
             change: `${dashboardData.accessStats?.offPeakCount ?? 0} users`,
@@ -584,12 +625,13 @@ export default function DashboardPage() {
 
         {widget.data.change && (
           <div
-            className={`flex items-center gap-1 text-sm ${widget.data.trend === 'up'
-              ? 'text-green-600'
-              : widget.data.trend === 'down'
+            className={`flex items-center gap-1 text-sm ${
+              widget.data.trend === 'up'
+                ? 'text-green-600'
+                : widget.data.trend === 'down'
                 ? 'text-red-600'
                 : 'text-gray-600'
-              }`}
+            }`}
           >
             {widget.data.trend === 'up' ? (
               <TrendingUp className="w-4 h-4" />
@@ -678,12 +720,13 @@ export default function DashboardPage() {
           {widget.data.map((activity: any, index: number) => (
             <div key={activity.id || index} className="flex items-center gap-3">
               <div
-                className={`w-2 h-2 rounded-full ${activity.status === 'success'
-                  ? 'bg-green-500'
-                  : activity.status === 'warning'
+                className={`w-2 h-2 rounded-full ${
+                  activity.status === 'success'
+                    ? 'bg-green-500'
+                    : activity.status === 'warning'
                     ? 'bg-yellow-500'
                     : 'bg-red-500'
-                  }`}
+                }`}
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">
@@ -722,10 +765,10 @@ export default function DashboardPage() {
                     alert.severity === 'critical'
                       ? 'destructive'
                       : alert.severity === 'high'
-                        ? 'destructive'
-                        : alert.severity === 'medium'
-                          ? 'secondary'
-                          : 'outline'
+                      ? 'destructive'
+                      : alert.severity === 'medium'
+                      ? 'secondary'
+                      : 'outline'
                   }
                   className="ml-2"
                 >
@@ -796,7 +839,7 @@ export default function DashboardPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ offline: true }),
                     });
-                  } catch { }
+                  } catch {}
                   await signOut({ callbackUrl: '/auth/login' });
                 }}
               >
@@ -849,8 +892,9 @@ export default function DashboardPage() {
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`widget ${snapshot.isDragging ? 'dragging' : ''
-                            }`}
+                          className={`widget ${
+                            snapshot.isDragging ? 'dragging' : ''
+                          }`}
                           style={{
                             ...provided.draggableProps.style,
                             gridColumn: `span ${widget.position.width}`,
